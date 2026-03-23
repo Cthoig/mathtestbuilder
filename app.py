@@ -29,16 +29,21 @@ def parse_text_input(text):
     return questions
 
 
-def compile_pdf(latex_str, images):
+def compile_pdf(latex_str, images, logo=None):
     """Write .tex, save uploaded images, run pdflatex, return PDF bytes."""
     tmp = tempfile.mkdtemp()
     tex_path = os.path.join(tmp, "test.tex")
     pdf_path = os.path.join(tmp, "test.pdf")
 
+    # Question images go in images/ subfolder (referenced as images/file.png)
     img_dir = os.path.join(tmp, "images")
     os.makedirs(img_dir)
     for name, file_obj in images.items():
         file_obj.save(os.path.join(img_dir, name))
+
+    # Logo goes in the root build folder (referenced as logo.png)
+    if logo is not None:
+        logo.save(os.path.join(tmp, "logo.png"))
 
     with open(tex_path, "w", encoding="utf-8") as f:
         f.write(latex_str)
@@ -636,19 +641,16 @@ def generate():
             has_logo=has_logo,
         )
 
-        # Collect question images + logo into one dict for compile_pdf
+        # Collect question images (referenced as images/filename in LaTeX)
         images = {}
         for f in request.files.getlist("images"):
             if f.filename:
                 images[f.filename] = f
 
-        # Save logo as "logo.png" so LaTeX can find it by that name
-        if has_logo:
-            logo_file = request.files["logo"]
-            # Wrap it so compile_pdf can call .save() on it
-            images["logo.png"] = logo_file
+        # Logo is saved separately at the root level (referenced as logo.png)
+        logo = request.files["logo"] if has_logo else None
 
-        pdf_bytes = compile_pdf(latex, images)
+        pdf_bytes = compile_pdf(latex, images, logo=logo)
 
         import uuid
         filename = str(uuid.uuid4()) + ".pdf"
