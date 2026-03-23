@@ -13,5 +13,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN chmod +x start.sh
-CMD ["/bin/sh", "start.sh"]
+RUN python -c "from app import app; print('App imported OK')"
+
+CMD ["python", "run.py"]
