@@ -9,43 +9,59 @@ from questions.MCQuestion import MCQuestion
 # -------------------------
 def sanitise(text):
     """
-    Escape LaTeX special characters in plain-text portions of question text,
-    while leaving $...$ inline maths and \\command sequences untouched.
+    Escape LaTeX special characters in plain-text parts of question text.
+    Leaves $...$ maths blocks and already-escaped sequences (like dollar-sign, percent)
+    completely untouched.
 
-    Users write:  What is the gradient of $y=3x^2$ at $x=1$?
-    LaTeX gets:   What is the gradient of $y=3x^2$ at $x=1$?  (no change needed)
-
-    Users write:  Cost is $50 & profit is 10%
-    LaTeX gets:   Cost is \$50 \& profit is 10\%
-
-    Characters escaped outside maths: & % # _ { } ~ ^
-    Characters NOT escaped: $ (maths delimiter), \\ (already a command)
+    Examples:
+        $y=3x^2$ at the point $x=1$  ->  unchanged
+        50% discount                 ->  50\\% discount
+        profit & loss                ->  profit \\& loss
+        cost is \\$50               ->  cost is \\$50  (already escaped)
     """
     import re
-    result = []
-    # Split on $...$ blocks, alternating plain/maths
+
+    ESCAPE = {
+        '&': r'\&',
+        '%': r'\%',
+        '#': r'\#',
+        '_': r'\_',
+        '{': r'\{',
+        '}': r'\}',
+        '~': r'\textasciitilde{}',
+        '^': r'\textasciicircum{}',
+    }
+
     parts = re.split(r'(\$[^$]*\$)', text)
+    result = []
+
     for i, part in enumerate(parts):
         if i % 2 == 1:
-            # Inside $...$ — pass through unchanged
+            # Inside $...$ maths block — pass through unchanged
             result.append(part)
         else:
-            # Plain text — escape special chars (but not backslash, already commands)
-            part = part.replace('&',  r'\&')
-            part = part.replace('%',  r'\%')
-            part = part.replace('#',  r'\#')
-            part = part.replace('_',  r'\_')
-            part = part.replace('{',  r'\{')
-            part = part.replace('}',  r'\}')
-            part = part.replace('~',  r'\textasciitilde{}')
-            part = part.replace('^',  r'\textasciicircum{}')
-            result.append(part)
+            # Plain text — escape char by char, skip already-escaped sequences
+            out = []
+            j = 0
+            while j < len(part):
+                ch = part[j]
+                if ch == '\\':
+                    # Already a LaTeX command — keep backslash + next char as-is
+                    out.append(ch)
+                    j += 1
+                    if j < len(part):
+                        out.append(part[j])
+                        j += 1
+                elif ch in ESCAPE:
+                    out.append(ESCAPE[ch])
+                    j += 1
+                else:
+                    out.append(ch)
+                    j += 1
+            result.append(''.join(out))
+
     return ''.join(result)
 
-
-# -------------------------
-# WORKING LINES (top-level)
-# -------------------------
 def generate_working_lines(space):
     """Ruled working lines at top-level (full text width)."""
     try:
@@ -94,9 +110,13 @@ def render_question_header(text, marks):
     break out of the enumerate indent — same trick as the working lines.
     Keeps the question number on the same line as the text.
     """
+    # Use \parbox so long questions wrap naturally within the text width.
+    # \hfill pushes the marks to the right on the first line.
+    safe = sanitise(text)
     return (
         "\\leavevmode\n"
-        f"\\hspace*{{-\\leftskip}}\\makebox[\\textwidth][l]{{{sanitise(text)} \\hfill [{marks}]}}\\par\n"
+        f"\\hspace*{{-\\leftskip}}"
+        f"\\parbox{{\\textwidth}}{{{safe} \\hfill [{marks}]}}\\par\n"
     )
 
 
