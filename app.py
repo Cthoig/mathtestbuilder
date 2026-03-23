@@ -3,6 +3,7 @@ import sys
 import tempfile
 import shutil
 import subprocess
+import base64
 from pathlib import Path
 from flask import Flask, request, send_file, jsonify, render_template_string
 from docx import Document
@@ -34,7 +35,6 @@ def compile_pdf(latex_str, images):
     tex_path = os.path.join(tmp, "test.tex")
     pdf_path = os.path.join(tmp, "test.pdf")
 
-    # Save any uploaded images into images/ subfolder
     img_dir = os.path.join(tmp, "images")
     os.makedirs(img_dir)
     for name, file_obj in images.items():
@@ -81,7 +81,6 @@ HTML = r"""<!DOCTYPE html>
   html, body { height: 100%; background: var(--cream); color: var(--ink);
     font-family: 'Source Serif 4', Georgia, serif; font-size: 15px; }
 
-  /* HEADER */
   header { display: flex; align-items: stretch; height: 58px;
     border-bottom: 1px solid var(--rule); background: var(--cream); }
   .hdr-stripe { width: 5px; background: var(--accent); flex-shrink: 0; }
@@ -91,11 +90,9 @@ HTML = r"""<!DOCTYPE html>
   .hdr-sub { font-size: 0.82rem; font-style: italic; color: var(--ink-lite); }
   .accent-bar { height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent2) 60%, transparent); }
 
-  /* LAYOUT */
   .layout { display: grid; grid-template-columns: 1fr 300px;
     gap: 16px; padding: 16px; height: calc(100vh - 62px); }
 
-  /* PANELS */
   .panel { background: var(--white); border: 1px solid var(--rule);
     border-radius: 5px; overflow: hidden; display: flex; flex-direction: column; }
   .panel-hdr { display: flex; align-items: center; gap: 8px;
@@ -107,7 +104,6 @@ HTML = r"""<!DOCTYPE html>
     color: #fff; font-size: 0.68rem; font-weight: 700; font-family: monospace;
     display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
-  /* LEFT COLUMN */
   .left { display: flex; flex-direction: column; gap: 0; min-height: 0; }
 
   .title-row { display: flex; align-items: center; gap: 8px;
@@ -135,7 +131,6 @@ HTML = r"""<!DOCTYPE html>
     font-size: 0.8rem; line-height: 1.85; color: var(--ink);
     padding: 14px; resize: none; outline: none; background: var(--white); }
 
-  /* DROP ZONE */
   .drop-zone { flex: 1; margin: 14px; border: 2px dashed var(--rule);
     border-radius: 6px; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 8px;
@@ -147,7 +142,6 @@ HTML = r"""<!DOCTYPE html>
   .drop-file { font-size: 0.75rem; font-family: monospace; color: var(--success); }
   #file-input { display: none; }
 
-  /* IMAGES PANE */
   .img-pane { flex: 1; display: flex; flex-direction: column;
     min-height: 0; padding: 10px 12px; gap: 8px; }
   .img-add-btn { display: flex; align-items: center; justify-content: center;
@@ -169,7 +163,6 @@ HTML = r"""<!DOCTYPE html>
     font-size: 0.78rem; font-style: italic; }
   #img-file-input { display: none; }
 
-  /* HINT BAR */
   .hint-bar { display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
     padding: 6px 12px; background: var(--cream2);
     border-top: 1px solid var(--cream3); flex-shrink: 0; }
@@ -177,8 +170,33 @@ HTML = r"""<!DOCTYPE html>
   .chip { font-size: 0.68rem; font-family: monospace; background: var(--cream3);
     color: var(--ink-mid); padding: 2px 6px; border-radius: 3px; }
 
-  /* RIGHT COLUMN */
-  .right { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  .right { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; }
+
+  /* SCHOOL SETTINGS */
+  .school-inner { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .field-row { display: flex; flex-direction: column; gap: 3px; }
+  .field-label { font-size: 0.72rem; color: var(--ink-lite); font-style: italic; }
+  .field-input { border: 1px solid var(--cream3); border-radius: 3px;
+    padding: 6px 8px; font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 0.88rem; color: var(--ink); background: var(--cream);
+    outline: none; width: 100%; }
+  .field-input:focus { border-color: var(--accent); background: var(--white); }
+
+  /* LOGO UPLOAD */
+  .logo-upload { display: flex; align-items: center; gap: 8px; }
+  .logo-btn { padding: 6px 12px; background: var(--cream2); color: var(--ink-mid);
+    border: 1px solid var(--cream3); border-radius: 3px; font-size: 0.8rem;
+    cursor: pointer; white-space: nowrap; transition: all 0.15s; font-family: inherit; }
+  .logo-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .logo-preview { display: none; max-height: 40px; max-width: 80px;
+    border-radius: 3px; border: 1px solid var(--cream3); }
+  .logo-preview.visible { display: block; }
+  .logo-name { font-size: 0.72rem; font-family: monospace; color: var(--success);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .logo-clear { background: none; border: none; color: var(--ink-lite);
+    cursor: pointer; font-size: 0.9rem; padding: 0; line-height: 1; flex-shrink: 0; }
+  .logo-clear:hover { color: var(--accent); }
+  #logo-input { display: none; }
 
   .gen-inner { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
   .gen-btn { padding: 12px; background: var(--accent); color: #fff; border: none;
@@ -195,8 +213,7 @@ HTML = r"""<!DOCTYPE html>
   .dl-btn:hover { opacity: 0.88; }
   .dl-btn.visible { display: flex; }
 
-  /* LOG */
-  .log-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .log-panel { flex: 1; min-height: 80px; display: flex; flex-direction: column; }
   .log-body { flex: 1; overflow-y: auto; background: #1a1612;
     padding: 10px 12px; min-height: 0; }
   .log-line { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;
@@ -205,7 +222,6 @@ HTML = r"""<!DOCTYPE html>
   .log-line.err { color: #eb5757; }
   .log-line.hdr { color: #f2c94c; }
 
-  /* GUIDE */
   .guide-body { padding: 10px 12px; overflow-y: auto; flex: 1; }
   .g-head { font-family: monospace; font-size: 0.7rem; font-weight: 700;
     color: var(--accent); margin-top: 8px; }
@@ -238,7 +254,7 @@ HTML = r"""<!DOCTYPE html>
 
 <div class="layout">
 
-  <!-- LEFT: editor + images tabs -->
+  <!-- LEFT: editor -->
   <div class="left panel">
     <div class="panel-hdr">
       <div class="badge">1</div>
@@ -259,7 +275,7 @@ HTML = r"""<!DOCTYPE html>
 
     <!-- Text pane -->
     <div class="pane active" id="pane-text">
-      <textarea id="text-input" spellcheck="false" placeholder="Start typing your test...">Equations
+      <textarea id="text-input" spellcheck="false">Equations
 
 Solve 3x + 5 = 17
 Marks: 2
@@ -318,7 +334,7 @@ Time: 1</textarea>
           Add any images referenced in your test with <code>Image: filename.png</code>
         </div>
         <div class="img-list" id="img-list">
-          <div class="img-empty" id="img-empty">No images added yet</div>
+          <div class="img-empty">No images added yet</div>
         </div>
       </div>
     </div>
@@ -337,10 +353,42 @@ Time: 1</textarea>
   <!-- RIGHT column -->
   <div class="right">
 
-    <!-- Generate -->
+    <!-- School settings -->
     <div class="panel" style="flex-shrink:0">
       <div class="panel-hdr">
         <div class="badge">2</div>
+        <span class="panel-hdr-title">School settings</span>
+      </div>
+      <div class="school-inner">
+
+        <div class="field-row">
+          <label class="field-label">School name</label>
+          <input class="field-input" id="school-name" type="text"
+                 placeholder="e.g. Riverside High School"/>
+        </div>
+
+        <div class="field-row">
+          <label class="field-label">School logo</label>
+          <div class="logo-upload">
+            <button class="logo-btn" onclick="document.getElementById('logo-input').click()">
+              Upload logo
+            </button>
+            <input type="file" id="logo-input" accept=".png,.jpg,.jpeg"
+                   onchange="onLogoSelect(event)"/>
+            <img id="logo-preview" class="logo-preview" src="" alt="logo preview"/>
+            <span id="logo-name" class="logo-name"></span>
+            <button id="logo-clear" class="logo-clear" onclick="clearLogo()"
+                    style="display:none" title="Remove logo">✕</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Generate -->
+    <div class="panel" style="flex-shrink:0">
+      <div class="panel-hdr">
+        <div class="badge">3</div>
         <span class="panel-hdr-title">Generate PDF</span>
       </div>
       <div class="gen-inner">
@@ -399,11 +447,11 @@ Marks: 2  Space: 3cm</div>
 </div>
 
 <script>
-// ── State ──────────────────────────────────────────────────────────────────
-let docxFile  = null;
-let imgFiles  = {};   // name -> File object
+let docxFile = null;
+let imgFiles = {};
+let logoFile = null;
 
-// ── Tabs ───────────────────────────────────────────────────────────────────
+// ── Tabs ──────────────────────────────────────────────────────────────────
 function switchTab(key) {
   document.querySelectorAll('.tab').forEach((t, i) => {
     const keys = ['text', 'file', 'images'];
@@ -413,58 +461,69 @@ function switchTab(key) {
   document.getElementById('pane-' + key).classList.add('active');
 }
 
-// ── Drag helpers ───────────────────────────────────────────────────────────
+// ── Docx drop ─────────────────────────────────────────────────────────────
 function ev(e, cls, add) {
   e.preventDefault();
   document.getElementById('drop-zone').classList.toggle(cls, add);
 }
-
 function onDrop(e) {
   e.preventDefault();
   ev(e, 'over', false);
   const f = e.dataTransfer.files[0];
   if (f && f.name.endsWith('.docx')) setDocx(f);
 }
-
-function onFileSelect(e) {
-  if (e.target.files[0]) setDocx(e.target.files[0]);
-}
-
+function onFileSelect(e) { if (e.target.files[0]) setDocx(e.target.files[0]); }
 function setDocx(f) {
   docxFile = f;
   document.getElementById('drop-file').textContent = '✓ ' + f.name;
 }
 
-// ── Image management ───────────────────────────────────────────────────────
+// ── Question images ───────────────────────────────────────────────────────
 function onImgSelect(e) {
   for (const f of e.target.files) imgFiles[f.name] = f;
   renderImgList();
 }
-
-function removeImg(name) {
-  delete imgFiles[name];
-  renderImgList();
-}
-
+function removeImg(name) { delete imgFiles[name]; renderImgList(); }
 function renderImgList() {
   const list  = document.getElementById('img-list');
-  const empty = document.getElementById('img-empty');
   const badge = document.getElementById('img-badge');
   const names = Object.keys(imgFiles);
   badge.textContent = names.length ? ` (${names.length})` : '';
-  if (!names.length) {
-    list.innerHTML = '<div class="img-empty" id="img-empty">No images added yet</div>';
-    return;
-  }
-  list.innerHTML = names.map(n =>
-    `<div class="img-item">
-       <span>${n}</span>
-       <button class="img-remove" onclick="removeImg('${n}')" title="Remove">✕</button>
-     </div>`
-  ).join('');
+  list.innerHTML = names.length
+    ? names.map(n =>
+        `<div class="img-item"><span>${n}</span>
+         <button class="img-remove" onclick="removeImg('${n}')">✕</button></div>`
+      ).join('')
+    : '<div class="img-empty">No images added yet</div>';
 }
 
-// ── Logging ────────────────────────────────────────────────────────────────
+// ── Logo ──────────────────────────────────────────────────────────────────
+function onLogoSelect(e) {
+  const f = e.target.files[0];
+  if (!f) return;
+  logoFile = f;
+  document.getElementById('logo-name').textContent = f.name;
+  document.getElementById('logo-clear').style.display = 'block';
+  // Show preview
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = document.getElementById('logo-preview');
+    img.src = ev.target.result;
+    img.classList.add('visible');
+  };
+  reader.readAsDataURL(f);
+}
+function clearLogo() {
+  logoFile = null;
+  document.getElementById('logo-name').textContent = '';
+  document.getElementById('logo-clear').style.display = 'none';
+  const img = document.getElementById('logo-preview');
+  img.src = '';
+  img.classList.remove('visible');
+  document.getElementById('logo-input').value = '';
+}
+
+// ── Logging ───────────────────────────────────────────────────────────────
 function log(msg, cls = '') {
   const body = document.getElementById('log-body');
   const d = document.createElement('div');
@@ -473,17 +532,15 @@ function log(msg, cls = '') {
   body.appendChild(d);
   body.scrollTop = body.scrollHeight;
 }
+function clearLog() { document.getElementById('log-body').innerHTML = ''; }
 
-function clearLog() {
-  document.getElementById('log-body').innerHTML = '';
-}
-
-// ── Generate ───────────────────────────────────────────────────────────────
+// ── Generate ──────────────────────────────────────────────────────────────
 async function generate() {
-  const btn    = document.getElementById('gen-btn');
-  const dlBtn  = document.getElementById('dl-btn');
-  const title  = document.getElementById('test-title').value.trim() || 'Mathematics Test';
-  const active = document.querySelector('.tab.active').textContent.trim();
+  const btn        = document.getElementById('gen-btn');
+  const dlBtn      = document.getElementById('dl-btn');
+  const title      = document.getElementById('test-title').value.trim() || 'Mathematics Test';
+  const schoolName = document.getElementById('school-name').value.trim();
+  const activeTab  = document.querySelector('.tab.active').textContent.trim();
 
   clearLog();
   dlBtn.classList.remove('visible');
@@ -492,8 +549,9 @@ async function generate() {
 
   const fd = new FormData();
   fd.append('title', title);
+  fd.append('school_name', schoolName);
 
-  if (active.startsWith('Upload')) {
+  if (activeTab.startsWith('Upload')) {
     if (!docxFile) { log('No .docx file selected.', 'err'); reset(btn); return; }
     fd.append('docx', docxFile);
   } else {
@@ -504,6 +562,10 @@ async function generate() {
 
   for (const [name, file] of Object.entries(imgFiles)) {
     fd.append('images', file, name);
+  }
+
+  if (logoFile) {
+    fd.append('logo', logoFile, logoFile.name);
   }
 
   log('→ Parsing content…', 'hdr');
@@ -547,7 +609,8 @@ def index():
 @app.route("/generate", methods=["POST"])
 def generate():
     try:
-        title = request.form.get("title", "Mathematics Test")
+        title       = request.form.get("title", "Mathematics Test")
+        school_name = request.form.get("school_name", "").strip()
 
         # Parse questions
         if "docx" in request.files:
@@ -564,19 +627,29 @@ def generate():
         n_sections  = sum(1 for q in questions if isinstance(q, Section))
         n_questions = sum(1 for q in questions if not isinstance(q, Section))
 
-        # Build LaTeX
-        latex = build_latex_test(questions, title=title)
+        # Build LaTeX — pass school name and whether a logo was uploaded
+        has_logo = "logo" in request.files and request.files["logo"].filename != ""
+        latex = build_latex_test(
+            questions,
+            title=title,
+            school_name=school_name,
+            has_logo=has_logo,
+        )
 
-        # Collect uploaded images
+        # Collect question images + logo into one dict for compile_pdf
         images = {}
         for f in request.files.getlist("images"):
             if f.filename:
                 images[f.filename] = f
 
-        # Compile
+        # Save logo as "logo.png" so LaTeX can find it by that name
+        if has_logo:
+            logo_file = request.files["logo"]
+            # Wrap it so compile_pdf can call .save() on it
+            images["logo.png"] = logo_file
+
         pdf_bytes = compile_pdf(latex, images)
 
-        # Save for download
         import uuid
         filename = str(uuid.uuid4()) + ".pdf"
         out_path = os.path.join(UPLOAD_FOLDER, filename)
@@ -592,7 +665,7 @@ def generate():
 
     except Exception as e:
         import traceback
-        return jsonify(ok=False, error=str(e)), 500
+        return jsonify(ok=False, error=str(e) + "\n" + traceback.format_exc()), 500
 
 
 @app.route("/download/<filename>")
