@@ -3,6 +3,46 @@ from questions.MultiPartQuestion import MultiPartQuestion
 from questions.MCQuestion import MCQuestion
 
 
+
+# -------------------------
+# TEXT SANITISER
+# -------------------------
+def sanitise(text):
+    """
+    Escape LaTeX special characters in plain-text portions of question text,
+    while leaving $...$ inline maths and \\command sequences untouched.
+
+    Users write:  What is the gradient of $y=3x^2$ at $x=1$?
+    LaTeX gets:   What is the gradient of $y=3x^2$ at $x=1$?  (no change needed)
+
+    Users write:  Cost is $50 & profit is 10%
+    LaTeX gets:   Cost is \$50 \& profit is 10\%
+
+    Characters escaped outside maths: & % # _ { } ~ ^
+    Characters NOT escaped: $ (maths delimiter), \\ (already a command)
+    """
+    import re
+    result = []
+    # Split on $...$ blocks, alternating plain/maths
+    parts = re.split(r'(\$[^$]*\$)', text)
+    for i, part in enumerate(parts):
+        if i % 2 == 1:
+            # Inside $...$ — pass through unchanged
+            result.append(part)
+        else:
+            # Plain text — escape special chars (but not backslash, already commands)
+            part = part.replace('&',  r'\&')
+            part = part.replace('%',  r'\%')
+            part = part.replace('#',  r'\#')
+            part = part.replace('_',  r'\_')
+            part = part.replace('{',  r'\{')
+            part = part.replace('}',  r'\}')
+            part = part.replace('~',  r'\textasciitilde{}')
+            part = part.replace('^',  r'\textasciicircum{}')
+            result.append(part)
+    return ''.join(result)
+
+
 # -------------------------
 # WORKING LINES (top-level)
 # -------------------------
@@ -56,7 +96,7 @@ def render_question_header(text, marks):
     """
     return (
         "\\leavevmode\n"
-        f"\\hspace*{{-\\leftskip}}\\makebox[\\textwidth][l]{{{text} \\hfill [{marks}]}}\\par\n"
+        f"\\hspace*{{-\\leftskip}}\\makebox[\\textwidth][l]{{{sanitise(text)} \\hfill [{marks}]}}\\par\n"
     )
 
 
