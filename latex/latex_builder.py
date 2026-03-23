@@ -199,12 +199,15 @@ def render_mc_question(q):
 # -------------------------
 # LATEX BUILDER
 # -------------------------
-def build_latex_test(questions, title="Mathematics Test"):
+def build_latex_test(questions, title="Mathematics Test", school_name="", has_logo=False):
 
     total_marks   = sum(getattr(q, "marks", 0) for q in questions)
     total_time    = sum(getattr(q, "time_estimate", 0) for q in questions)
     section_marks = calculate_section_marks(questions)
 
+
+    logo_block = "\\includegraphics[width=4cm]{logo.png}\n\n\\vspace{0.5cm}\n" if has_logo else ""
+    school_block = ("\\LARGE \\textbf{" + school_name.replace("&", "\\&") + "}\n\n\\vspace{0.5cm}\n") if school_name else ""
     latex = rf"""
 \documentclass[12pt]{{article}}
 
@@ -224,11 +227,11 @@ def build_latex_test(questions, title="Mathematics Test"):
 
 \begin{{center}}
 
-\includegraphics[width=4cm]{{logo.png}}
+{logo_block}
 
 \vspace{{0.5cm}}
 
-\LARGE \textbf{{Your School Name}}
+{school_block}
 
 \vspace{{0.5cm}}
 
